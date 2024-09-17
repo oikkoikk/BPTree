@@ -153,10 +153,12 @@ class Node:
 
         while node is not None:
             for i in range(len(node.keys)):
-                if min_key <= node.keys[i] <= max_key:
-                    results.append((node.keys[i], node.values[i]))
-                elif min_key > node.keys[i] or node.keys[i] > max_key:
+                if node.keys[i] < min_key:
+                    continue
+                elif node.keys[i] > max_key:
                     return results
+                else:
+                    results.append((node.keys[i], node.values[i]))
             node = node.next
         return results
 
