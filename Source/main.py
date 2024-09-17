@@ -1,7 +1,6 @@
 import argparse
 import bisect
 import csv
-import io
 import os
 import pickle
 import sys
@@ -12,11 +11,7 @@ sys.setrecursionlimit(100000)
 
 
 degree = 0
-
-MIN_CHILDREN = ceil((degree / 2))
-MIN_KEYS = MIN_CHILDREN - 1
-MAX_CHILDREN = degree
-MAX_KEYS = MAX_CHILDREN - 1
+bptree = None
 
 
 class DeleteStatus(Enum):
@@ -33,7 +28,7 @@ def internal(node):
     return len(node.children) > 0
 
 
-def full(node):
+def full(node, MAX_KEYS):
     return len(node.keys) == MAX_KEYS
 
 
@@ -83,6 +78,11 @@ class Node:
         self.next = None
         self.degree = degree
 
+        self.MIN_CHILDREN = ceil(self.degree / 2)
+        self.MIN_KEYS = self.MIN_CHILDREN - 1
+        self.MAX_CHILDREN = self.degree
+        self.MAX_KEYS = self.MAX_CHILDREN - 1
+
     def insert(self, key, value):
         if leaf(self):
             index = bisect.bisect_left(self.keys, key)
@@ -90,7 +90,7 @@ class Node:
             self.keys.insert(index, key)
             self.values.insert(index, value)
 
-            if full(self):
+            if full(self, self.MAX_KEYS):
                 return self.split()
             return None
 
@@ -108,7 +108,7 @@ class Node:
                 self.keys.insert(index, split_key)
                 self.children.insert(index + 1, new_node)
 
-                if full(self):
+                if full(self, self.MAX_KEYS):
                     return self.split()
             return None
 
@@ -133,12 +133,13 @@ class Node:
         return new_node.keys[0], new_node
 
     def search(self, key, print_path=False):
-        node = self.root.search_node(key, print_path=True)
+        node = self.search_node(key, print_path=True)
+        value = None
 
         if node is not None and key in node.keys:
+            value = node.values[node.keys.index(key)]
             print(node.values[node.keys.index(key)])
-        else:
-            print("NOT FOUND")
+        return value
 
     def range_search(self, min_key, max_key):
         results = []
@@ -148,7 +149,7 @@ class Node:
             for i in range(len(node.keys)):
                 if min_key <= node.keys[i] <= max_key:
                     results.append((node.keys[i], node.values[i]))
-                elif node.keys[i] > max_key:
+                elif min_key > node.keys[i] or node.keys[i] > max_key:
                     return results
             node = node.next
         return results
@@ -174,7 +175,7 @@ class Node:
                 index = self.keys.index(key)
                 self.keys.pop(index)
                 self.values.pop(index)
-                if len(self.keys) < MIN_KEYS:
+                if len(self.keys) < self.MIN_KEYS:
                     if parent:
                         return self.rebalance(parent, index_in_parent)
                     elif len(self.keys) == 0:
@@ -185,7 +186,7 @@ class Node:
             result = self.children[index].delete(key, self, index)
             if result == DeleteStatus.UNDERFLOW:
                 self.children.pop(index)
-                if len(self.children) < MIN_CHILDREN:
+                if len(self.children) < self.MIN_CHILDREN:
                     if parent:
                         return self.rebalance(parent, index_in_parent)
                     else:
@@ -207,7 +208,7 @@ class Node:
         # 왼쪽 형제에서 빌리기
         if index_in_parent > 0:
             left_sibling = parent.children[index_in_parent - 1]
-            if len(left_sibling.keys) > MIN_KEYS:
+            if len(left_sibling.keys) > self.MIN_KEYS:
                 if leaf(self):
                     self.keys.insert(0, left_sibling.keys.pop())
                     self.values.insert(0, left_sibling.values.pop())
@@ -220,7 +221,7 @@ class Node:
         # 오른쪽 형제에서 빌리기
         if index_in_parent < len(parent.children) - 1:
             right_sibling = parent.children[index_in_parent + 1]
-            if len(right_sibling.keys) > MIN_KEYS:
+            if len(right_sibling.keys) > self.MIN_KEYS:
                 if leaf(self):
                     self.keys.append(right_sibling.keys.pop(0))
                     self.values.append(right_sibling.values.pop(0))
@@ -261,9 +262,7 @@ class Node:
 
 def save_to_file(bptree, filename):
     with open(filename, "wb") as file:
-        buffered = io.BufferedWriter(file)
-        pickle.dump(bptree, buffered)
-        buffered.flush()
+        pickle.dump(bptree, file)
 
 
 def load_from_file(filename):
@@ -281,23 +280,15 @@ def insert_from_csv(index_file, data_file):
     if os.path.exists(index_file):
         bptree = load_from_file(index_file)
 
-    count = 0
-    batch_size = 100000  # 10만 개씩 배치로 처리
-
     # CSV 파일에서 키-값 쌍을 읽어와 삽입
     with open(data_file, newline="") as csvfile:
-        buffered = io.BufferedReader(csvfile)
-        csvreader = csv.reader(buffered)
+        csvreader = csv.reader(csvfile)
         for row in csvreader:
             key, value = int(row[0]), int(row[1])
             bptree.insert(key, value)
-            count += 1
-            # 배치 크기마다 저장
-            if count % batch_size == 0:
-                bptree.save_to_file(index_file)
 
     # 삽입 후 B+ 트리 파일을 갱신
-    bptree.save_to_file(index_file)
+    save_to_file(bptree, index_file)
 
 
 def delete_from_csv(index_file, data_file):
@@ -312,7 +303,7 @@ def delete_from_csv(index_file, data_file):
             bptree.delete(key)
 
     # 삭제 후 B+ 트리 파일을 갱신
-    bptree.save_to_file(index_file)
+    save_to_file(bptree, index_file)
 
 
 def search_from_csv(index_file, key):
