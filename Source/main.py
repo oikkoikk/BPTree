@@ -115,22 +115,28 @@ class Node:
     def split(self):
         mid = len(self.keys) // 2
 
-        new_node = Node(self.degree)
-        new_node.keys = self.keys[mid:]
-        new_node.values = self.values[mid:]
-        self.keys = self.keys[:mid]
-        self.values = self.values[:mid]
-
-        if internal(self):
-            new_node.children = self.children[mid + 1 :]
-            self.children = self.children[: mid + 1]
-
         if leaf(self):
-            # TODO: next가 맞는지 확인
+            new_node = Node(self.degree)
+            new_node.keys = self.keys[mid:]
+            new_node.values = self.values[mid:]
+            self.keys = self.keys[:mid]
+            self.values = self.values[:mid]
+
             new_node.next = self.next
             self.next = new_node
 
-        return new_node.keys[0], new_node
+            return new_node.keys[0], new_node
+        if internal(self):
+            split_key = self.keys[mid]
+
+            new_node = Node(self.degree)
+            new_node.keys = self.keys[mid + 1 :]
+            new_node.children = self.children[mid + 1 :]
+
+            self.keys = self.keys[:mid]
+            self.children = self.children[: mid + 1]
+
+            return split_key, new_node
 
     def search(self, key, print_path=False):
         node = self.search_node(key, print_path=True)
