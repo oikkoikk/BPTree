@@ -7,11 +7,7 @@ import sys
 from enum import Enum
 from math import ceil
 
-sys.setrecursionlimit(100000)
-
-
-degree = 0
-bptree = None
+sys.setrecursionlimit(1000000)
 
 
 class DeleteStatus(Enum):
@@ -191,7 +187,10 @@ class Node:
             return DeleteStatus.OK
         if internal(self):
             index = bisect.bisect_left(self.keys, key)
-            result = self.children[index].delete(key, self, index)
+            if index < len(self.keys) and self.keys[index] == key:
+                result = self.children[index + 1].delete(key, self, index + 1)
+            else:
+                result = self.children[index].delete(key, self, index)
             if result == DeleteStatus.UNDERFLOW:
                 self.children.pop(index)
                 if len(self.children) < self.MIN_CHILDREN:
