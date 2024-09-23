@@ -45,7 +45,7 @@ class BPTree:
             self.root = new_root
 
     def search(self, key):
-        result = self.root.search(key, print_path=True)
+        result = self.root.search(key)
 
         if result is None:
             print("NOT FOUND")
@@ -134,7 +134,7 @@ class Node:
 
             return split_key, new_node
 
-    def search(self, key, print_path=False):
+    def search(self, key):
         node = self.search_node(key, print_path=True)
         value = None
 
